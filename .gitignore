@@ -128,3 +128,7 @@
 /.gradle/8.6/checksums/sha1-checksums.bin
 /.idea/vcs.xml
 /.idea/workspace.xml
+.idea/migrations.xml
+.idea/kotlinc.xml
+.idea/compiler.xml
+.idea/.name
