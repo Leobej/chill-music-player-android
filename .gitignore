@@ -132,3 +132,4 @@
 .idea/kotlinc.xml
 .idea/compiler.xml
 .idea/.name
+/.gradle/
