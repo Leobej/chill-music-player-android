@@ -3,6 +3,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+
 @Composable
 fun MusicPlayerScreen(
     viewModel: MusicPlayerViewModel
@@ -45,22 +47,37 @@ fun MusicPlayerScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        Button(onClick = { viewModel.onPlayPauseToggle() }) {
-            Text(if (isPlaying) "Pause" else "Play")
+        // Display the current and next songs
+        Text(text = "Current Track: ${state.currentTrack?.name ?: "None"}")
+        Text(text = "Next Track: ${state.nextTrack?.name ?: "None"}")
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Buttons in a row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            Button(onClick = { viewModel.playPreviousTrack() }) {
+                Text("Previous")
+            }
+
+            Button(onClick = { viewModel.onPlayPauseToggle() }) {
+                Text(if (isPlaying) "Pause" else "Play")
+            }
+
+            Button(onClick = { viewModel.playNextTrack() }) {
+                Text("Next")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(onClick = { viewModel.onStop() }) {
-            Text("Stop")
-        }
-
+        // Slider
         Text(
             text = "${(sliderPosition * duration / 1000).toInt()} sec / ${(duration / 1000).toInt()} sec",
             modifier = Modifier.padding(bottom = 8.dp)
         )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         Slider(
             value = sliderPosition,
@@ -87,6 +104,7 @@ fun MusicPlayerScreen(
         }
     }
 }
+
 
 private fun updateSlider(
     viewModel: MusicPlayerViewModel,
