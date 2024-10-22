@@ -1,10 +1,12 @@
 import android.app.Application
-import android.media.MediaPlayer
-import android.util.Log
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import com.example.chillmusicplayer.R
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+
 import java.io.File
 
 data class PlayerState(
@@ -18,24 +20,61 @@ data class PlayerState(
     val playlist: List<File> = emptyList()
 )
 
-
 class MusicPlayerViewModel(application: Application) : AndroidViewModel(application) {
     private val _playerState = MutableLiveData(PlayerState())
     val playerState: LiveData<PlayerState> = _playerState
 
-    var mediaPlayer: MediaPlayer? = null
-        private set
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(application.applicationContext).build()
 
     init {
-        _playerState.value = _playerState.value?.copy(
-            duration = mediaPlayer?.duration?.toFloat() ?: 0f
-        )
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                // Ensure that the player state is reflected correctly
+                if (state == Player.STATE_ENDED) {
+                    playNextTrack()
+                }
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                // Update the playing state
+                _playerState.value = _playerState.value?.copy(isPlaying = isPlaying)
+
+                // Update the slider position when playback starts or stops
+                val currentPosition = exoPlayer.currentPosition.toFloat()
+                val newSliderPosition = currentPosition / exoPlayer.duration.toFloat()
+                _playerState.value = _playerState.value?.copy(sliderPosition = newSliderPosition)
+            }
+        })
     }
 
     fun loadPlaylist(playlist: List<File>) {
         _playerState.value = _playerState.value?.copy(playlist = playlist)
         if (playlist.isNotEmpty()) {
-            playTrackAtIndex(0)
+            // Prepare the player without starting playback
+            prepareTrackAtIndex(0)
+        }
+    }
+
+    private fun prepareTrackAtIndex(index: Int) {
+        if (index < 0 || index >= _playerState.value?.playlist?.size ?: 0) return
+
+        val track = _playerState.value?.playlist?.get(index)
+        val nextTrack = if (index + 1 < _playerState.value?.playlist?.size ?: 0) {
+            _playerState.value?.playlist?.get(index + 1)
+        } else {
+            null
+        }
+
+        track?.let {
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(it)))
+            exoPlayer.prepare() // Prepare the media item
+            _playerState.value = _playerState.value?.copy(
+                currentTrack = it,
+                nextTrack = nextTrack,
+                currentIndex = index,
+                duration = exoPlayer.duration.toFloat(), // Update the duration here
+                isPlaying = false // Start in a paused state
+            )
         }
     }
 
@@ -50,18 +89,15 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
         }
 
         track?.let {
-            mediaPlayer?.release()
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(it.absolutePath)
-                prepare()
-                start()
-            }
+            exoPlayer.setMediaItem(MediaItem.fromUri(Uri.fromFile(it)))
+            exoPlayer.prepare()
+            exoPlayer.play()
             _playerState.value = _playerState.value?.copy(
                 currentTrack = it,
                 nextTrack = nextTrack,
                 currentIndex = index,
-                duration = mediaPlayer?.duration?.toFloat() ?: 0f,
-                isPlaying = true
+                duration = exoPlayer.duration.toFloat(),
+                isPlaying = exoPlayer.isPlaying
             )
         }
     }
@@ -85,43 +121,23 @@ class MusicPlayerViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun onPlayPauseToggle() {
-        _playerState.value = _playerState.value?.let { state ->
-            val isPlaying = !state.isPlaying
-            if (isPlaying) {
-                mediaPlayer?.start()
-            } else {
-                mediaPlayer?.pause()
-            }
-            state.copy(isPlaying = isPlaying)
+        if (exoPlayer.isPlaying) {
+            exoPlayer.pause()
+        } else {
+            exoPlayer.play()
         }
-    }
 
-    fun onStop() {
-        mediaPlayer?.stop()
-        mediaPlayer?.prepare()
-        _playerState.value = _playerState.value?.copy(
-            isPlaying = false,
-            sliderPosition = 0f
-        )
+        // Update the player state after the action is taken
+        _playerState.value = _playerState.value?.copy(isPlaying = exoPlayer.isPlaying)
     }
 
     fun onSliderChange(newSliderPosition: Float) {
         _playerState.value = _playerState.value?.copy(sliderPosition = newSliderPosition)
-        mediaPlayer?.seekTo((newSliderPosition * mediaPlayer!!.duration).toInt())
-    }
-
-    fun onPlaybackEnded() {
-        _playerState.value = _playerState.value?.copy(
-            sliderPosition = 0f,
-            isPlaying = false,
-            hasEnded = true
-        )
-        mediaPlayer?.seekTo(0)
+        exoPlayer.seekTo((newSliderPosition * exoPlayer.duration).toLong())
     }
 
     override fun onCleared() {
         super.onCleared()
-        mediaPlayer?.release()
-        mediaPlayer = null
+        exoPlayer.release()
     }
 }

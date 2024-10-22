@@ -1,4 +1,3 @@
-import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
@@ -19,14 +18,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
+@Preview
 @Composable
 fun MusicPlayerScreen(
     viewModel: MusicPlayerViewModel
 ) {
     val state by viewModel.playerState.observeAsState(PlayerState())
-
+    val exoPlayer = viewModel.exoPlayer
     val sliderPosition = state.sliderPosition
     val duration = state.duration
     val isPlaying = state.isPlaying
@@ -47,55 +48,58 @@ fun MusicPlayerScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        // Display the current and next songs
-        Text(text = "Current Track: ${state.currentTrack?.name ?: "None"}")
+        Text(text = "Current Track: ${state.currentTrack?.name}")
         Text(text = "Next Track: ${state.nextTrack?.name ?: "None"}")
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Buttons in a row
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Button(onClick = { viewModel.playPreviousTrack() }) {
-                Text("Previous")
-            }
-
             Button(onClick = { viewModel.onPlayPauseToggle() }) {
                 Text(if (isPlaying) "Pause" else "Play")
+            }
+
+            Button(onClick = { viewModel.playPreviousTrack() }) {
+                Text("Previous")
             }
 
             Button(onClick = { viewModel.playNextTrack() }) {
                 Text("Next")
             }
+
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Slider
         Text(
-            text = "${(sliderPosition * duration / 1000).toInt()} sec / ${(duration / 1000).toInt()} sec",
+            text = "${(exoPlayer.currentPosition / 1000).toInt()} sec / ${(exoPlayer.duration / 1000).toInt()} sec",
             modifier = Modifier.padding(bottom = 8.dp)
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Slider(
             value = sliderPosition,
             onValueChange = { newValue ->
+                // Update the slider position in the ViewModel
                 viewModel.onSliderChange(newValue)
-                // Provide immediate feedback by seeking the media player
-                val mediaPlayer = viewModel.mediaPlayer
-                mediaPlayer?.seekTo((newValue * duration).toInt())
+
+                // Calculate the new position and seek to it immediately
+                val newPosition = (newValue * duration).toLong()
+                exoPlayer.seekTo(newPosition)
             },
             onValueChangeFinished = {
-                // Update the slider position to the exact position after seek
-                val mediaPlayer = viewModel.mediaPlayer
-                val currentPosition = mediaPlayer?.currentPosition?.toFloat() ?: 0f
-                val newSliderPosition = currentPosition / (mediaPlayer?.duration?.toFloat() ?: 1f)
+                // After the user has finished changing the slider, you might want to update
+                // the slider position in the ViewModel based on the current playback position
+                val currentPosition = exoPlayer.currentPosition.toFloat()
+                val newSliderPosition = currentPosition / duration.toFloat()
                 viewModel.onSliderChange(newSliderPosition)
             },
             modifier = Modifier.fillMaxWidth()
         )
+
     }
 
     DisposableEffect(Unit) {
@@ -105,24 +109,16 @@ fun MusicPlayerScreen(
     }
 }
 
-
 private fun updateSlider(
     viewModel: MusicPlayerViewModel,
     handler: Handler
 ): Runnable {
     return object : Runnable {
         override fun run() {
-            val mediaPlayer = viewModel.mediaPlayer
-            mediaPlayer?.let {
-                val progress = it.currentPosition.toFloat() / (it.duration.toFloat())
-                viewModel.onSliderChange(progress)
-                if (it.currentPosition >= it.duration) {
-                    handler.removeCallbacks(this)
-                    viewModel.onPlaybackEnded()
-                } else {
-                    handler.postDelayed(this, 1000)
-                }
-            }
+            val exoPlayer = viewModel.exoPlayer
+            val progress = exoPlayer.currentPosition.toFloat() / exoPlayer.duration.toFloat()
+            viewModel.onSliderChange(progress)
+            handler.postDelayed(this, 1000)
         }
     }
 }
